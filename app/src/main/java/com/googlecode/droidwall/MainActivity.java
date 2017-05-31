@@ -23,8 +23,10 @@
 
 package com.googlecode.droidwall;
 
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Date;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -78,6 +80,7 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 	private static final int MENU_CLEARLOG	= 7;
 	private static final int MENU_SETPWD	= 8;
 	private static final int MENU_SETCUSTOM = 9;
+	private static final int MENU_CAPTURE   = 10;
 	
 	/** progress dialog instance */
 	private ListView listview = null;
@@ -283,10 +286,12 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
        				entry = new ListEntry();
        				entry.box_wifi = (CheckBox) convertView.findViewById(R.id.itemcheck_wifi);
        				entry.box_3g = (CheckBox) convertView.findViewById(R.id.itemcheck_3g);
+					entry.box_cap = (CheckBox) convertView.findViewById(R.id.itemcheck_cap);
        				entry.text = (TextView) convertView.findViewById(R.id.itemtext);
        				entry.icon = (ImageView) convertView.findViewById(R.id.itemicon);
        				entry.box_wifi.setOnCheckedChangeListener(MainActivity.this);
        				entry.box_3g.setOnCheckedChangeListener(MainActivity.this);
+					entry.box_cap.setOnCheckedChangeListener(MainActivity.this);
        				convertView.setTag(entry);
         		} else {
         			// Convert an existing view
@@ -306,6 +311,9 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
         		final CheckBox box_3g = entry.box_3g;
         		box_3g.setTag(app);
         		box_3g.setChecked(app.selected_3g);
+				final CheckBox box_cap = entry.box_cap;
+				box_cap.setTag(app);
+				box_cap.setChecked(app.selected_cap);
        			return convertView;
         	}
         };
@@ -323,6 +331,8 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
     	menu.add(0, MENU_CLEARLOG, 0, R.string.clear_log).setIcon(android.R.drawable.ic_menu_close_clear_cancel);
     	menu.add(0, MENU_SETPWD, 0, R.string.setpwd).setIcon(android.R.drawable.ic_lock_lock);
     	menu.add(0, MENU_SETCUSTOM, 0, R.string.set_custom_script);
+		menu.add(0, MENU_CAPTURE, 0, R.string.cap_disabled);
+
     	
     	return true;
     }
@@ -330,6 +340,7 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
     public boolean onPrepareOptionsMenu(Menu menu) {
     	final MenuItem item_onoff = menu.getItem(MENU_DISABLE);
     	final MenuItem item_apply = menu.getItem(MENU_APPLY);
+		final MenuItem item_cap = menu.getItem(MENU_CAPTURE);
     	final boolean enabled = Api.isEnabled(this);
     	if (enabled) {
     		item_onoff.setIcon(android.R.drawable.button_onoff_indicator_on);
@@ -349,6 +360,13 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
     		item_log.setIcon(android.R.drawable.button_onoff_indicator_off);
     		item_log.setTitle(R.string.log_disabled);
     	}
+    	final boolean capRAWEnabled = getSharedPreferences(Api.PREFS_NAME,0).getBoolean(Api.PREF_RAWCAP, true);
+		final boolean capSSLEnabled = getSharedPreferences(Api.PREFS_NAME,0).getBoolean(Api.PREF_SSLCAP, true);
+		if (capRAWEnabled || capSSLEnabled){
+			item_cap.setTitle(R.string.cap_enabled);
+		} else {
+            item_cap.setTitle(R.string.cap_disabled);
+        }
     	return super.onPrepareOptionsMenu(menu);
     }
     /*@Override
@@ -420,6 +438,9 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 				return true;
 			case MENU_SETCUSTOM:
 				setCustomScript();
+				return true;
+			case MENU_CAPTURE:
+				enableOrDisableCapture();
 				return true;
 		}
 		return false;
@@ -591,6 +612,24 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 		handler.sendEmptyMessageDelayed(0, 100);
 	}
 	/**
+	 * Execute or kill tcpdump and sslsplit.
+	 */
+	private void enableOrDisableCapture() {
+		Date date = new Date();
+		SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd,HH:mm:ss");
+		String timeStr = df.format(date);
+		// TODO Get network interface
+		SharedPreferences pref = getSharedPreferences(Api.PREFS_NAME, 0);
+		boolean flag0 = pref.getBoolean(Api.PREF_RAWCAP,true);
+		boolean flag1 = pref.getBoolean(Api.PREF_SSLCAP,true);
+		if (flag0 || flag1){
+			Api.killCapture(this);
+		}
+		else{
+			Api.execCapture(this, Api.DIR_CAPTURE + "/" + timeStr, "wlan0");
+		}
+	}
+	/**
 	 * Called an application is check/unchecked
 	 */
 	@Override
@@ -610,6 +649,11 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 						this.dirty = true;
 					}
 					break;
+				case R.id.itemcheck_cap:
+					if (app.selected_cap != isChecked) {
+						app.selected_cap = isChecked;
+						this.dirty = true;
+					}
 			}
 		}
 	}
@@ -690,6 +734,7 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 	private static class ListEntry {
 		private CheckBox box_wifi;
 		private CheckBox box_3g;
+		private CheckBox box_cap;
 		private TextView text;
 		private ImageView icon;
 		private DroidApp app;

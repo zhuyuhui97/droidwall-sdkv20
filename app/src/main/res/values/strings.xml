@@ -86,5 +86,5 @@
 	</string>
 
     <string name="cap_enabled">Capture enabled</string>
-    <string name="cap_disabled">Capture enabled</string>
+    <string name="cap_disabled">Capture disabled</string>
 </resources>

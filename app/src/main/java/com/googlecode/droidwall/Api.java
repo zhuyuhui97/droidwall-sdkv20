@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.StringReader;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -72,6 +73,9 @@ public final class Api {
 	public static final String PREF_MODE 			= "BlockMode";
 	public static final String PREF_ENABLED			= "Enabled";
 	public static final String PREF_LOGENABLED		= "LogEnabled";
+	public static final String PREF_CAP_UIDS		= "CapUids";
+	public static final String PREF_RAWCAP          = "RawCapEnabled";
+	public static final String PREF_SSLCAP          = "SslCapEnabled";
 	// Modes
 	public static final String MODE_WHITELIST = "whitelist";
 	public static final String MODE_BLACKLIST = "blacklist";
@@ -83,6 +87,14 @@ public final class Api {
 	public static final String STATUS_EXTRA			= "com.googlecode.droidwall.intent.extra.STATUS";
 	public static final String SCRIPT_EXTRA			= "com.googlecode.droidwall.intent.extra.SCRIPT";
 	public static final String SCRIPT2_EXTRA		= "com.googlecode.droidwall.intent.extra.SCRIPT2";
+	// Binary file name
+	public static final String BIN_BUSYBOX          = "busybox_armv6l";
+	public static final String BIN_IPTABLES         = "iptables_armv5";
+	public static final String BIN_SSLSPLIT         = "sslsplit_armv7hf";
+	public static final String BIN_TCPDUMP          = "tcpdump_armv7hf";
+	// Capture directory
+	public static final String DIR_CAPTURE          = "/sdcard/capture";
+
 	
 	// Cached applications
 	public static DroidApp applications[] = null;
@@ -110,14 +122,18 @@ public final class Api {
 	private static String scriptHeader(Context ctx) {
 		final String dir = ctx.getDir("bin",0).getAbsolutePath();
 		final String myiptables = dir + "/iptables_armv5";
+        final String mysslsplit = dir + "/sslsplit_armv7hf";
+        final String mytcpdump = dir + "/tcpdump_armv7hf";
 		return "" +
 			"IPTABLES=iptables\n" +
 			"BUSYBOX=busybox\n" +
 			"GREP=grep\n" +
 			"ECHO=echo\n" +
+			"TCPDUMP=" + mytcpdump + "\n" +
+			"SSLSPLIT=" + mysslsplit + "\n" +
 			"# Try to find busybox\n" +
-			"if " + dir + "/busybox_g1 --help >/dev/null 2>/dev/null ; then\n" +
-			"	BUSYBOX="+dir+"/busybox_g1\n" +
+			"if " + dir + "/busybox_armv6l --help >/dev/null 2>/dev/null ; then\n" +
+			"	BUSYBOX="+dir+"/busybox_armv6l\n" +
 			"	GREP=\"$BUSYBOX grep\"\n" +
 			"	ECHO=\"$BUSYBOX echo\"\n" +
 			"elif busybox --help >/dev/null 2>/dev/null ; then\n" +
@@ -141,6 +157,16 @@ public final class Api {
 			"# Try to find iptables\n" +
 			"if " + myiptables + " --version >/dev/null 2>/dev/null ; then\n" +
 			"	IPTABLES="+myiptables+"\n" +
+			"fi\n" +
+            "# Try to find tcpdump\n" +
+            "if ! $TCPDUMP -h >/dev/null 2>/dev/null ; then \n" +
+            "   $ECHO The tcpdump command is required. Capture will not work.\n" +
+            "   exit 1\n" +
+			"fi\n" +
+            "# Try to find sslsplit\n" +
+            "if ! $SSLSPLIT -V >/dev/null 2>/dev/null ; then \n" +
+            "   $ECHO The sslsplit command is required. Capture will not work.\n" +
+            "   exit 1\n" +
 			"fi\n" +
 			"";
 	}
@@ -176,7 +202,7 @@ public final class Api {
      * @param uids3g list of selected UIDs for 2G/3G to allow or disallow (depending on the working mode)
      * @param showErrors indicates if errors should be alerted
      */
-	private static boolean applyIptablesRulesImpl(Context ctx, List<Integer> uidsWifi, List<Integer> uids3g, boolean showErrors) {
+	private static boolean applyIptablesRulesImpl(Context ctx, List<Integer> uidsWifi, List<Integer> uids3g, List<Integer> uidsCap, boolean showErrors) {
 		if (ctx == null) {
 			return false;
 		}
@@ -207,6 +233,11 @@ public final class Api {
 				"$IPTABLES -F droidwall-3g || exit 8\n" +
 				"$IPTABLES -F droidwall-wifi || exit 9\n" +
 				"$IPTABLES -F droidwall-reject || exit 10\n" +
+				"# Create rules for capture and flush existed rules\n" +
+				"$IPTABLES -t nat -L capture >/dev/null 2>/dev/null || $IPTABLES -t nat --new capture || exit 11\n" +
+				"$IPTABLES -t nat -D OUTPUT -j capture >/dev/null 2>/dev/null || exit 12\n" +
+				"$IPTABLES -t nat -A OUTPUT -j capture >/dev/null 2>/dev/null || exit 13\n" +
+				"$IPTABLES -t nat -F capture >/dev/null 2>/dev/null || exit 14\n" +
 			"");
 			// Check if logging is enabled
 			if (logenabled) {
@@ -242,7 +273,10 @@ public final class Api {
 			final String targetRule = (whitelist ? "RETURN" : "droidwall-reject");
 			final boolean any_3g = uids3g.indexOf(SPECIAL_UID_ANY) >= 0;
 			final boolean any_wifi = uidsWifi.indexOf(SPECIAL_UID_ANY) >= 0;
-			if (whitelist && !any_wifi) {
+			//final boolean any_cap = uidsCap.indexOf(SPECIAL_UID_ANY) >= 0;
+			// TODO: What is this?
+			final boolean any_cap = uidsCap.size() >=0 ;
+			if (whitelist) {
 				// When "white listing" wifi, we need to ensure that the dhcp and wifi users are allowed
 				int uid = android.os.Process.getUidForName("dhcp");
 				if (uid != -1) {
@@ -259,22 +293,23 @@ public final class Api {
 				if (blacklist) {
 					/* block any application on this interface */
 					script.append("$IPTABLES -A droidwall-3g -j ").append(targetRule).append(" || exit\n");
-				}
-			} else {
-				/* release/block individual applications on this interface */
-				for (final Integer uid : uids3g) {
-					if (uid >= 0) script.append("$IPTABLES -A droidwall-3g -m owner --uid-owner ").append(uid).append(" -j ").append(targetRule).append(" || exit\n");
+				} else {
+					/* release/block individual applications on this interface */
+					for (final Integer uid : uids3g) {
+						if (uid >= 0) script.append("$IPTABLES -A droidwall-3g -m owner --uid-owner ").append(uid).append(" -j ").append(targetRule).append(" || exit\n");
+					}
 				}
 			}
 			if (any_wifi) {
 				if (blacklist) {
 					/* block any application on this interface */
 					script.append("$IPTABLES -A droidwall-wifi -j ").append(targetRule).append(" || exit\n");
-				}
-			} else {
-				/* release/block individual applications on this interface */
-				for (final Integer uid : uidsWifi) {
-					if (uid >= 0) script.append("$IPTABLES -A droidwall-wifi -m owner --uid-owner ").append(uid).append(" -j ").append(targetRule).append(" || exit\n");
+				} else {
+					/* release/block individual applications on this interface */
+					for (final Integer uid : uidsWifi) {
+						if (uid >= 0)
+							script.append("$IPTABLES -A droidwall-wifi -m owner --uid-owner ").append(uid).append(" -j ").append(targetRule).append(" || exit\n");
+					}
 				}
 			}
 			if (whitelist) {
@@ -282,17 +317,17 @@ public final class Api {
 					if (uids3g.indexOf(SPECIAL_UID_KERNEL) >= 0) {
 						script.append("# hack to allow kernel packets on white-list\n");
 						script.append("$IPTABLES -A droidwall-3g -m owner --uid-owner 0:999999999 -j droidwall-reject || exit\n");
-					} else {
-						script.append("$IPTABLES -A droidwall-3g -j droidwall-reject || exit\n");
 					}
+				} else {
+					script.append("$IPTABLES -A droidwall-3g -j droidwall-reject || exit\n");
 				}
 				if (!any_wifi) {
 					if (uidsWifi.indexOf(SPECIAL_UID_KERNEL) >= 0) {
 						script.append("# hack to allow kernel packets on white-list\n");
 						script.append("$IPTABLES -A droidwall-wifi -m owner --uid-owner 0:999999999 -j droidwall-reject || exit\n");
-					} else {
-						script.append("$IPTABLES -A droidwall-wifi -j droidwall-reject || exit\n");
 					}
+				} else {
+					script.append("$IPTABLES -A droidwall-wifi -j droidwall-reject || exit\n");
 				}
 			} else {
 				if (uids3g.indexOf(SPECIAL_UID_KERNEL) >= 0) {
@@ -304,6 +339,11 @@ public final class Api {
 					script.append("# hack to BLOCK kernel packets on black-list\n");
 					script.append("$IPTABLES -A droidwall-wifi -m owner --uid-owner 0:999999999 -j RETURN || exit\n");
 					script.append("$IPTABLES -A droidwall-wifi -j droidwall-reject || exit\n");
+				}
+			}
+			if (any_cap){
+				for (final Integer uid : uidsCap) {
+					if (uid >= 10000) script.append("$IPTABLES -t nat -A capture -m owner --uid-owner ").append(uid).append(" -p tcp --dport 443 -j DNAT --to 127.0.0.1:8443 || exit\n");
 				}
 			}
 	    	final StringBuilder res = new StringBuilder();
@@ -337,6 +377,7 @@ public final class Api {
 		final SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, 0);
 		final String savedUids_wifi = prefs.getString(PREF_WIFI_UIDS, "");
 		final String savedUids_3g = prefs.getString(PREF_3G_UIDS, "");
+		final String savedUids_cap = prefs.getString(PREF_CAP_UIDS, "");
 		final List<Integer> uids_wifi = new LinkedList<Integer>();
 		if (savedUids_wifi.length() > 0) {
 			// Check which applications are allowed on wifi
@@ -365,7 +406,20 @@ public final class Api {
 				}
 			}
 		}
-		return applyIptablesRulesImpl(ctx, uids_wifi, uids_3g, showErrors);
+		final List<Integer> uids_cap = new LinkedList<Integer>();
+		if (savedUids_cap.length() > 0) {
+			final StringTokenizer tok = new StringTokenizer(savedUids_cap, "|");
+			while (tok.hasMoreTokens()) {
+				final String uid = tok.nextToken();
+				if (!uid.equals("")) {
+					try {
+						uids_cap.add(Integer.parseInt(uid));
+					} catch (Exception ex) {
+					}
+				}
+			}
+		}
+		return applyIptablesRulesImpl(ctx, uids_wifi, uids_3g, uids_cap, showErrors);
 	}
 	
     /**
@@ -391,6 +445,7 @@ public final class Api {
 		// Builds a pipe-separated list of names
 		final StringBuilder newuids_wifi = new StringBuilder();
 		final StringBuilder newuids_3g = new StringBuilder();
+		final StringBuilder newuids_cap = new StringBuilder();
 		for (int i=0; i<apps.length; i++) {
 			if (apps[i].selected_wifi) {
 				if (newuids_wifi.length() != 0) newuids_wifi.append('|');
@@ -400,11 +455,16 @@ public final class Api {
 				if (newuids_3g.length() != 0) newuids_3g.append('|');
 				newuids_3g.append(apps[i].uid);
 			}
+			if (apps[i].selected_cap) {
+				if (newuids_cap.length() != 0) newuids_cap.append('|');
+				newuids_cap.append(apps[i].uid);
+			}
 		}
 		// save the new list of UIDs
 		final Editor edit = prefs.edit();
 		edit.putString(PREF_WIFI_UIDS, newuids_wifi.toString());
 		edit.putString(PREF_3G_UIDS, newuids_3g.toString());
+		edit.putString(PREF_CAP_UIDS, newuids_cap.toString());
 		edit.commit();
     }
     
@@ -427,6 +487,7 @@ public final class Api {
 					"$IPTABLES -F droidwall-reject\n" +
 					"$IPTABLES -F droidwall-3g\n" +
 					"$IPTABLES -F droidwall-wifi\n" +
+					"$IPTABLES -t nat -F capture\n" +
 	    			"");
 	    	if (customScript.length() > 0) {
 				script.append("\n# BEGIN OF CUSTOM SCRIPT (user-defined)\n");
@@ -568,6 +629,129 @@ public final class Api {
 			alert(ctx, "error: " + e);
 		}
 	}
+	/**
+	 * Execute tcpump and sslsplit to start capture.
+	 * @param ctx application context
+	 */
+	public static void execCapture(Context ctx, String capDir, String netif){
+		startRAWCapture(ctx, capDir + "/pcap", netif);
+		startSSLCapture(ctx,capDir + "/ssl");
+	}
+	/**
+	 * Kill tcpump and sslsplit to stop capture.
+	 * @param ctx application context
+	 */
+	public static void killCapture(Context ctx){
+		StringBuilder res = new StringBuilder();
+		String script = scriptHeader(ctx);
+		script += "$BUSYBOX killall " + BIN_SSLSPLIT + "\n";
+		script += "$BUSYBOX killall " + BIN_TCPDUMP + "\n";
+		runScriptAsRoot(ctx, script, res, 1000);
+		Editor edit = ctx.getSharedPreferences(PREFS_NAME,0).edit();
+		edit.putBoolean(PREF_SSLCAP,false);
+		edit.putBoolean(PREF_RAWCAP,false);
+		edit.commit();
+	}
+	/**
+	 * @param ctx application context
+	 * @return status of sslsplit
+	 */
+	public static boolean startSSLCapture(Context ctx, String capDir){
+		final StringBuilder script = new StringBuilder();
+		StringBuilder res = new StringBuilder();
+		String crtfile = ctx.getDir("bin",0) + "/ca_crt";
+		String keyfile = ctx.getDir("bin",0) + "/ca_key";
+		SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME,0);
+		Editor edit = prefs.edit();
+		try{
+			script.append(scriptHeader(ctx));
+			script.append("$BUSYBOX mkdir -p " + capDir + "\n");
+			script.append("$SSLSPLIT -c " + crtfile + " -k " + keyfile + " -S "+ capDir + " -d ssl 127.0.0.1 8443");
+			runScriptAsRoot(ctx,script.toString(),res,1000);
+			edit.putBoolean(PREF_SSLCAP,true);
+			edit.commit();
+			return true;
+		}catch (Exception e) {
+			alert(ctx, "error starting sslsplit: " + e);
+		}
+		return false;
+	}
+
+	/**
+	 * @param ctx application context
+	 * @param capDir directory to save capture file
+	 * @param netif interface to be captured
+	 * @return status of tcpdump
+	 */
+	public static boolean startRAWCapture(Context ctx, String capDir, String netif){
+		final StringBuilder script = new StringBuilder();
+		StringBuilder res = new StringBuilder();
+		SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME,0);
+		Editor edit = prefs.edit();
+		try{
+			script.append(scriptHeader(ctx));
+			script.append("$BUSYBOX mkdir -p " + capDir + "\n");
+			script.append("$TCPDUMP -i " + netif + " -w " + capDir + "/main.pcap ip &");
+			runScriptAsRoot(ctx,script.toString(),res,1000);
+			edit.putBoolean(PREF_RAWCAP,true);
+			edit.commit();
+			return true;
+		}catch (Exception e) {
+			alert(ctx, "error starting tcpdump: " + e);
+		}
+		return false;
+	}
+
+	/**
+	 * Clear status of tcpdump and sslsplit in shared preferences.
+	 * @param ctx application context
+	 */
+	public static void clearCaptureStatusOnBoot(Context ctx){
+		boolean changed = false;
+		boolean sslEnabled;
+		boolean rawEnabled;
+		SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME,0);
+		Editor edit = prefs.edit();
+		/*
+		sslEnabled = prefs.getBoolean(PREF_SSLCAP, true);
+		rawEnabled = prefs.getBoolean(PREF_RAWCAP, true);
+		if (sslEnabled) {
+			edit.putBoolean(PREF_SSLCAP,false);
+		}
+		if (rawEnabled) {
+			edit.putBoolean(PREF_RAWCAP,false);
+		}
+		if (sslEnabled||rawEnabled) edit.commit();
+		*/
+		edit.putBoolean(PREF_SSLCAP,false);
+		edit.putBoolean(PREF_RAWCAP,false);
+		edit.commit();
+	}
+
+	/**
+	 * Find PIDs of progress whose name includes given string
+	 * @param ctx application context
+	 * @param name (a part of) name of progress
+	 * @return a list of PID of given name
+	 */
+	public static ArrayList<Integer> getPidByName(Context ctx, String name){
+		ArrayList<Integer> pidList=new ArrayList<Integer>();
+		StringBuilder script = new StringBuilder();
+		StringBuilder res = new StringBuilder();
+		script.append(scriptHeader(ctx));
+		script.append("$BUSYBOX ps -o pid,comm | $BUSYBOX grep ");
+		script.append(name);
+		script.append(" | $BUSYBOX awk \'{print $1}\'\n");
+		runScriptAsRoot(ctx,script.toString(),res,1000);
+		String[] pidStrArr = res.toString().split("\n");
+		for (String pidStr:pidStrArr) {
+			try {
+				pidList.add(Integer.parseInt(pidStr));
+			}catch (Exception e){}
+
+		}
+		return pidList;
+	}
 
     /**
      * @param ctx application context (mandatory)
@@ -582,8 +766,10 @@ public final class Api {
 		// allowed application names separated by pipe '|' (persisted)
 		final String savedUids_wifi = prefs.getString(PREF_WIFI_UIDS, "");
 		final String savedUids_3g = prefs.getString(PREF_3G_UIDS, "");
+		final String savedUids_cap = prefs.getString(PREF_CAP_UIDS, "");
 		int selected_wifi[] = new int[0];
 		int selected_3g[] = new int[0];
+		int selected_cap[] = new int[0];
 		if (savedUids_wifi.length() > 0) {
 			// Check which applications are allowed
 			final StringTokenizer tok = new StringTokenizer(savedUids_wifi, "|");
@@ -617,6 +803,23 @@ public final class Api {
 			}
 			// Sort the array to allow using "Arrays.binarySearch" later
 			Arrays.sort(selected_3g);
+		}
+		if (savedUids_cap.length() > 0) {
+			// Check which applications are allowed
+			final StringTokenizer tok = new StringTokenizer(savedUids_cap, "|");
+			selected_cap = new int[tok.countTokens()];
+			for (int i=0; i<selected_cap.length; i++) {
+				final String uid = tok.nextToken();
+				if (!uid.equals("")) {
+					try {
+						selected_cap[i] = Integer.parseInt(uid);
+					} catch (Exception ex) {
+						selected_cap[i] = -1;
+					}
+				}
+			}
+			// Sort the array to allow using "Arrays.binarySearch" later
+			Arrays.sort(selected_cap);
 		}
 		try {
 			final PackageManager pkgmanager = ctx.getPackageManager();
@@ -664,19 +867,22 @@ public final class Api {
 				if (!app.selected_3g && Arrays.binarySearch(selected_3g, app.uid) >= 0) {
 					app.selected_3g = true;
 				}
+				if (!app.selected_cap && Arrays.binarySearch(selected_cap, app.uid) >= 0) {
+					app.selected_cap = true;
+				}
 			}
 			if (changed) {
 				edit.commit();
 			}
 			/* add special applications to the list */
 			final DroidApp special[] = {
-				new DroidApp(SPECIAL_UID_ANY,"(Any application) - Same as selecting all applications", false, false),
-				new DroidApp(SPECIAL_UID_KERNEL,"(Kernel) - Linux kernel", false, false),
-				new DroidApp(android.os.Process.getUidForName("root"), "(root) - Applications running as root", false, false),
-				new DroidApp(android.os.Process.getUidForName("media"), "Media server", false, false),
-				new DroidApp(android.os.Process.getUidForName("vpn"), "VPN networking", false, false),
-				new DroidApp(android.os.Process.getUidForName("shell"), "Linux shell", false, false),
-				new DroidApp(android.os.Process.getUidForName("gps"), "GPS", false, false),
+				new DroidApp(SPECIAL_UID_ANY,"(Any application) - Same as selecting all applications", false, false, false),
+				new DroidApp(SPECIAL_UID_KERNEL,"(Kernel) - Linux kernel", false, false, false),
+				new DroidApp(android.os.Process.getUidForName("root"), "(root) - Applications running as root", false, false, false),
+				new DroidApp(android.os.Process.getUidForName("media"), "Media server", false, false, false),
+				new DroidApp(android.os.Process.getUidForName("vpn"), "VPN networking", false, false, false),
+				new DroidApp(android.os.Process.getUidForName("shell"), "Linux shell", false, false, false),
+				new DroidApp(android.os.Process.getUidForName("gps"), "GPS", false, false, false),
 			};
 			for (int i=0; i<special.length; i++) {
 				app = special[i];
@@ -687,6 +893,9 @@ public final class Api {
 					}
 					if (Arrays.binarySearch(selected_3g, app.uid) >= 0) {
 						app.selected_3g = true;
+					}
+					if (Arrays.binarySearch(selected_cap, app.uid) >= 0) {
+						app.selected_cap = true;
 					}
 					map.put(app.uid, app);
 				}
@@ -768,7 +977,6 @@ public final class Api {
 	 * @param ctx mandatory context
      * @param script the script to be executed
      * @param res the script output response (stdout + stderr)
-     * @param timeout timeout in milliseconds (-1 for none)
      * @return the script exit code
      * @throws IOException on any error executing the script, or writing it to disk
      */
@@ -780,7 +988,6 @@ public final class Api {
 	 * @param ctx mandatory context
      * @param script the script to be executed
      * @param res the script output response (stdout + stderr)
-     * @param timeout timeout in milliseconds (-1 for none)
      * @return the script exit code
      * @throws IOException on any error executing the script, or writing it to disk
      */
@@ -803,9 +1010,32 @@ public final class Api {
 				changed = true;
 			}
 			// Check busybox
-			file = new File(ctx.getDir("bin",0), "busybox_g1");
+			file = new File(ctx.getDir("bin",0), "busybox_armv6l");
 			if (!file.exists()) {
-				copyRawFile(ctx, R.raw.busybox_g1, file, "755");
+				copyRawFile(ctx, R.raw.busybox_armv6l, file, "755");
+				changed = true;
+			}
+			// Check sslsplit
+			file = new File(ctx.getDir("bin",0), "sslsplit_armv7hf");
+			if (!file.exists()) {
+				copyRawFile(ctx, R.raw.sslsplit_armv7hf, file, "755");
+				changed = true;
+			}
+			// Check tcpdump
+			file = new File(ctx.getDir("bin",0), "tcpdump_armv7hf");
+			if (!file.exists()) {
+				copyRawFile(ctx, R.raw.tcpdump_armv7hf, file, "755");
+				changed = true;
+			}
+			// Check certs
+			file = new File(ctx.getDir("bin",0), "ca_crt");
+			if (!file.exists()) {
+				copyRawFile(ctx, R.raw.ca_crt, file, "644");
+				changed = true;
+			}
+			file = new File(ctx.getDir("bin",0), "ca_key");
+			if (!file.exists()) {
+				copyRawFile(ctx, R.raw.ca_key, file, "644");
 				changed = true;
 			}
 			if (changed) {
@@ -921,6 +1151,8 @@ public final class Api {
     	boolean selected_wifi;
     	/** indicates if this application is selected for 3g */
     	boolean selected_3g;
+		/** indicates if this application is selected for capture */
+		boolean selected_cap;
     	/** toString cache */
     	String tostr;
     	/** application info */
@@ -934,11 +1166,12 @@ public final class Api {
     	
     	public DroidApp() {
     	}
-    	public DroidApp(int uid, String name, boolean selected_wifi, boolean selected_3g) {
+    	public DroidApp(int uid, String name, boolean selected_wifi, boolean selected_3g, boolean selected_cap) {
     		this.uid = uid;
     		this.names = new String[] {name};
     		this.selected_wifi = selected_wifi;
     		this.selected_3g = selected_3g;
+			this.selected_cap = selected_cap;
     	}
     	/**
     	 * Screen representation of this application

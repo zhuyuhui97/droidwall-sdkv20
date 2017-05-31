@@ -44,7 +44,7 @@ public class BootBroadcast extends BroadcastReceiver {
 	        			if (msg.arg1 != 0) Toast.makeText(context, msg.arg1, Toast.LENGTH_SHORT).show();
 	        		}
 	        	};
-				// Start a new thread to enable the firewall - this prevents ANR
+				// Start a new thread to enable the firewall and clear capture status - this prevents ANR
 				new Thread() {
 					@Override
 					public void run() {
@@ -55,6 +55,7 @@ public class BootBroadcast extends BroadcastReceiver {
 		        			toaster.sendMessage(msg);
 							Api.setEnabled(context, false);
 						}
+						Api.clearCaptureStatusOnBoot(context);
 					}
 				}.start();
 			}
