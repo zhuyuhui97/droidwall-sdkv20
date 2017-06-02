@@ -1091,6 +1091,7 @@ public final class Api {
 		// allowed application names separated by pipe '|' (persisted)
 		final String savedUids_wifi = prefs.getString(PREF_WIFI_UIDS, "");
 		final String savedUids_3g = prefs.getString(PREF_3G_UIDS, "");
+		final String savedUids_cap = prefs.getString(PREF_CAP_UIDS, "");
 		final String uid_str = uid + "";
 		boolean changed = false;
 		// look for the removed application in the "wi-fi" list
@@ -1127,6 +1128,24 @@ public final class Api {
 			}
 			if (changed) {
 				editor.putString(PREF_3G_UIDS, newuids.toString());
+			}
+		}
+		// look for the removed application in the "cap" list
+		if (savedUids_cap.length() > 0) {
+			final StringBuilder newuids = new StringBuilder();
+			final StringTokenizer tok = new StringTokenizer(savedUids_cap, "|");
+			while (tok.hasMoreTokens()) {
+				final String token = tok.nextToken();
+				if (uid_str.equals(token)) {
+					Log.d("DroidWall", "Removing UID " + token + " from the cap list (package removed)!");
+					changed = true;
+				} else {
+					if (newuids.length() > 0) newuids.append('|');
+					newuids.append(token);
+				}
+			}
+			if (changed) {
+				editor.putString(PREF_CAP_UIDS, newuids.toString());
 			}
 		}
 		// if anything has changed, save the new prefs...
