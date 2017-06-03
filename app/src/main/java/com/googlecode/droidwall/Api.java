@@ -235,7 +235,7 @@ public final class Api {
 				"$IPTABLES -F droidwall-reject || exit 10\n" +
 				"# Create rules for capture and flush existed rules\n" +
 				"$IPTABLES -t nat -L capture >/dev/null 2>/dev/null || $IPTABLES -t nat --new capture || exit 11\n" +
-				"$IPTABLES -t nat -D OUTPUT -j capture >/dev/null 2>/dev/null || exit 12\n" +
+				"$IPTABLES -t nat -D OUTPUT -j capture >/dev/null 2>/dev/null\n" +
 				"$IPTABLES -t nat -A OUTPUT -j capture >/dev/null 2>/dev/null || exit 13\n" +
 				"$IPTABLES -t nat -F capture >/dev/null 2>/dev/null || exit 14\n" +
 			"");
@@ -276,7 +276,7 @@ public final class Api {
 			//final boolean any_cap = uidsCap.indexOf(SPECIAL_UID_ANY) >= 0;
 			// TODO: What is this?
 			final boolean any_cap = uidsCap.size() >=0 ;
-			if (whitelist) {
+			if (whitelist && !any_wifi) {
 				// When "white listing" wifi, we need to ensure that the dhcp and wifi users are allowed
 				int uid = android.os.Process.getUidForName("dhcp");
 				if (uid != -1) {
@@ -293,23 +293,22 @@ public final class Api {
 				if (blacklist) {
 					/* block any application on this interface */
 					script.append("$IPTABLES -A droidwall-3g -j ").append(targetRule).append(" || exit\n");
-				} else {
-					/* release/block individual applications on this interface */
-					for (final Integer uid : uids3g) {
-						if (uid >= 0) script.append("$IPTABLES -A droidwall-3g -m owner --uid-owner ").append(uid).append(" -j ").append(targetRule).append(" || exit\n");
-					}
+				}
+			} else {
+				/* release/block individual applications on this interface */
+				for (final Integer uid : uids3g) {
+					if (uid >= 0) script.append("$IPTABLES -A droidwall-3g -m owner --uid-owner ").append(uid).append(" -j ").append(targetRule).append(" || exit\n");
 				}
 			}
 			if (any_wifi) {
 				if (blacklist) {
 					/* block any application on this interface */
 					script.append("$IPTABLES -A droidwall-wifi -j ").append(targetRule).append(" || exit\n");
-				} else {
-					/* release/block individual applications on this interface */
-					for (final Integer uid : uidsWifi) {
-						if (uid >= 0)
-							script.append("$IPTABLES -A droidwall-wifi -m owner --uid-owner ").append(uid).append(" -j ").append(targetRule).append(" || exit\n");
-					}
+				}
+			} else {
+				/* release/block individual applications on this interface */
+				for (final Integer uid : uidsWifi) {
+					if (uid >= 0) script.append("$IPTABLES -A droidwall-wifi -m owner --uid-owner ").append(uid).append(" -j ").append(targetRule).append(" || exit\n");
 				}
 			}
 			if (whitelist) {
@@ -317,17 +316,17 @@ public final class Api {
 					if (uids3g.indexOf(SPECIAL_UID_KERNEL) >= 0) {
 						script.append("# hack to allow kernel packets on white-list\n");
 						script.append("$IPTABLES -A droidwall-3g -m owner --uid-owner 0:999999999 -j droidwall-reject || exit\n");
+					} else {
+						script.append("$IPTABLES -A droidwall-3g -j droidwall-reject || exit\n");
 					}
-				} else {
-					script.append("$IPTABLES -A droidwall-3g -j droidwall-reject || exit\n");
 				}
 				if (!any_wifi) {
 					if (uidsWifi.indexOf(SPECIAL_UID_KERNEL) >= 0) {
 						script.append("# hack to allow kernel packets on white-list\n");
 						script.append("$IPTABLES -A droidwall-wifi -m owner --uid-owner 0:999999999 -j droidwall-reject || exit\n");
+					} else {
+						script.append("$IPTABLES -A droidwall-wifi -j droidwall-reject || exit\n");
 					}
-				} else {
-					script.append("$IPTABLES -A droidwall-wifi -j droidwall-reject || exit\n");
 				}
 			} else {
 				if (uids3g.indexOf(SPECIAL_UID_KERNEL) >= 0) {
