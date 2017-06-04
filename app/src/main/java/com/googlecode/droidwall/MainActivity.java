@@ -284,13 +284,9 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
         			convertView = inflater.inflate(R.layout.listitem, parent, false);
             		Log.d("DroidWall", ">> inflate("+convertView+")");
        				entry = new ListEntry();
-       				entry.box_wifi = (CheckBox) convertView.findViewById(R.id.itemcheck_wifi);
-       				entry.box_3g = (CheckBox) convertView.findViewById(R.id.itemcheck_3g);
 					entry.box_cap = (CheckBox) convertView.findViewById(R.id.itemcheck_cap);
        				entry.text = (TextView) convertView.findViewById(R.id.itemtext);
        				entry.icon = (ImageView) convertView.findViewById(R.id.itemicon);
-       				entry.box_wifi.setOnCheckedChangeListener(MainActivity.this);
-       				entry.box_3g.setOnCheckedChangeListener(MainActivity.this);
 					entry.box_cap.setOnCheckedChangeListener(MainActivity.this);
        				convertView.setTag(entry);
         		} else {
@@ -305,12 +301,6 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
         			// this icon has not been loaded yet - load it on a separated thread
             		new LoadIconTask().execute(app, getPackageManager(), convertView);
         		}
-        		final CheckBox box_wifi = entry.box_wifi;
-        		box_wifi.setTag(app);
-        		box_wifi.setChecked(app.selected_wifi);
-        		final CheckBox box_3g = entry.box_3g;
-        		box_3g.setTag(app);
-        		box_3g.setChecked(app.selected_3g);
 				final CheckBox box_cap = entry.box_cap;
 				box_cap.setTag(app);
 				box_cap.setChecked(app.selected_cap);
@@ -620,8 +610,8 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 		String timeStr = df.format(date);
 		// TODO Get network interface
 		SharedPreferences pref = getSharedPreferences(Api.PREFS_NAME, 0);
-		boolean flag0 = pref.getBoolean(Api.PREF_RAWCAP,true);
-		boolean flag1 = pref.getBoolean(Api.PREF_SSLCAP,true);
+		boolean flag0 = pref.getBoolean(Api.PREF_RAWCAP,false);
+		boolean flag1 = pref.getBoolean(Api.PREF_SSLCAP,false);
 		if (flag0 || flag1){
 			Api.killCapture(this);
 		}
@@ -637,20 +627,10 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 		final DroidApp app = (DroidApp) buttonView.getTag();
 		if (app != null) {
 			switch (buttonView.getId()) {
-				case R.id.itemcheck_wifi:
-					if (app.selected_wifi != isChecked) {
-						app.selected_wifi = isChecked;
-						this.dirty = true;
-					}
-					break;
-				case R.id.itemcheck_3g:
-					if (app.selected_3g != isChecked) {
-						app.selected_3g = isChecked;
-						this.dirty = true;
-					}
-					break;
 				case R.id.itemcheck_cap:
 					if (app.selected_cap != isChecked) {
+						app.selected_wifi = isChecked;
+						app.selected_3g = isChecked;
 						app.selected_cap = isChecked;
 						this.dirty = true;
 					}
@@ -732,8 +712,6 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 	 * Entry representing an application in the screen
 	 */
 	private static class ListEntry {
-		private CheckBox box_wifi;
-		private CheckBox box_3g;
 		private CheckBox box_cap;
 		private TextView text;
 		private ImageView icon;
