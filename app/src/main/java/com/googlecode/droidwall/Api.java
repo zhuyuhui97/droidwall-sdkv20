@@ -288,6 +288,12 @@ public final class Api {
 					script.append("# wifi user\n");
 					script.append("$IPTABLES -A droidwall-wifi -m owner --uid-owner ").append(uid).append(" -j RETURN || exit\n");
 				}
+				/* Allow root user as default */
+				uid = android.os.Process.getUidForName("root");
+				if (uid != -1) {
+					script.append("# root user\n");
+					script.append("$IPTABLES -A droidwall-wifi -m owner --uid-owner ").append(uid).append(" -j RETURN || exit\n");
+				}
 			}
 			if (any_3g) {
 				if (blacklist) {
@@ -295,6 +301,12 @@ public final class Api {
 					script.append("$IPTABLES -A droidwall-3g -j ").append(targetRule).append(" || exit\n");
 				}
 			} else {
+				/* Allow root user as default */
+				int root = android.os.Process.getUidForName("root");
+				if (root != -1) {
+					script.append("# root user\n");
+					script.append("$IPTABLES -A droidwall-3g -m owner --uid-owner ").append(root).append(" -j RETURN || exit\n");
+				}
 				/* release/block individual applications on this interface */
 				for (final Integer uid : uids3g) {
 					if (uid >= 0) script.append("$IPTABLES -A droidwall-3g -m owner --uid-owner ").append(uid).append(" -j ").append(targetRule).append(" || exit\n");
@@ -312,21 +324,14 @@ public final class Api {
 				}
 			}
 			if (whitelist) {
+				/* Allow SPECIAL_UID_KERNEL as default */
 				if (!any_3g) {
-					if (uids3g.indexOf(SPECIAL_UID_KERNEL) >= 0) {
 						script.append("# hack to allow kernel packets on white-list\n");
 						script.append("$IPTABLES -A droidwall-3g -m owner --uid-owner 0:999999999 -j droidwall-reject || exit\n");
-					} else {
-						script.append("$IPTABLES -A droidwall-3g -j droidwall-reject || exit\n");
-					}
 				}
 				if (!any_wifi) {
-					if (uidsWifi.indexOf(SPECIAL_UID_KERNEL) >= 0) {
 						script.append("# hack to allow kernel packets on white-list\n");
 						script.append("$IPTABLES -A droidwall-wifi -m owner --uid-owner 0:999999999 -j droidwall-reject || exit\n");
-					} else {
-						script.append("$IPTABLES -A droidwall-wifi -j droidwall-reject || exit\n");
-					}
 				}
 			} else {
 				if (uids3g.indexOf(SPECIAL_UID_KERNEL) >= 0) {
@@ -374,10 +379,10 @@ public final class Api {
 			return false;
 		}
 		final SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, 0);
-		final String savedUids_wifi = prefs.getString(PREF_WIFI_UIDS, "");
-		final String savedUids_3g = prefs.getString(PREF_3G_UIDS, "");
+		//final String savedUids_wifi = prefs.getString(PREF_WIFI_UIDS, "");
+		//final String savedUids_3g = prefs.getString(PREF_3G_UIDS, "");
 		final String savedUids_cap = prefs.getString(PREF_CAP_UIDS, "");
-		final List<Integer> uids_wifi = new LinkedList<Integer>();
+		/*final List<Integer> uids_wifi = new LinkedList<Integer>();
 		if (savedUids_wifi.length() > 0) {
 			// Check which applications are allowed on wifi
 			final StringTokenizer tok = new StringTokenizer(savedUids_wifi, "|");
@@ -404,7 +409,7 @@ public final class Api {
 					}
 				}
 			}
-		}
+		}*/
 		final List<Integer> uids_cap = new LinkedList<Integer>();
 		if (savedUids_cap.length() > 0) {
 			final StringTokenizer tok = new StringTokenizer(savedUids_cap, "|");
@@ -418,7 +423,7 @@ public final class Api {
 				}
 			}
 		}
-		return applyIptablesRulesImpl(ctx, uids_wifi, uids_3g, uids_cap, showErrors);
+		return applyIptablesRulesImpl(ctx, uids_cap, uids_cap, uids_cap, showErrors);
 	}
 	
     /**
@@ -442,18 +447,8 @@ public final class Api {
 		final SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, 0);
 		final DroidApp[] apps = getApps(ctx);
 		// Builds a pipe-separated list of names
-		final StringBuilder newuids_wifi = new StringBuilder();
-		final StringBuilder newuids_3g = new StringBuilder();
 		final StringBuilder newuids_cap = new StringBuilder();
 		for (int i=0; i<apps.length; i++) {
-			if (apps[i].selected_wifi) {
-				if (newuids_wifi.length() != 0) newuids_wifi.append('|');
-				newuids_wifi.append(apps[i].uid);
-			}
-			if (apps[i].selected_3g) {
-				if (newuids_3g.length() != 0) newuids_3g.append('|');
-				newuids_3g.append(apps[i].uid);
-			}
 			if (apps[i].selected_cap) {
 				if (newuids_cap.length() != 0) newuids_cap.append('|');
 				newuids_cap.append(apps[i].uid);
@@ -461,8 +456,6 @@ public final class Api {
 		}
 		// save the new list of UIDs
 		final Editor edit = prefs.edit();
-		edit.putString(PREF_WIFI_UIDS, newuids_wifi.toString());
-		edit.putString(PREF_3G_UIDS, newuids_3g.toString());
 		edit.putString(PREF_CAP_UIDS, newuids_cap.toString());
 		edit.commit();
     }
@@ -763,46 +756,8 @@ public final class Api {
 		}
 		final SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, 0);
 		// allowed application names separated by pipe '|' (persisted)
-		final String savedUids_wifi = prefs.getString(PREF_WIFI_UIDS, "");
-		final String savedUids_3g = prefs.getString(PREF_3G_UIDS, "");
 		final String savedUids_cap = prefs.getString(PREF_CAP_UIDS, "");
-		int selected_wifi[] = new int[0];
-		int selected_3g[] = new int[0];
 		int selected_cap[] = new int[0];
-		if (savedUids_wifi.length() > 0) {
-			// Check which applications are allowed
-			final StringTokenizer tok = new StringTokenizer(savedUids_wifi, "|");
-			selected_wifi = new int[tok.countTokens()];
-			for (int i=0; i<selected_wifi.length; i++) {
-				final String uid = tok.nextToken();
-				if (!uid.equals("")) {
-					try {
-						selected_wifi[i] = Integer.parseInt(uid);
-					} catch (Exception ex) {
-						selected_wifi[i] = -1;
-					}
-				}
-			}
-			// Sort the array to allow using "Arrays.binarySearch" later
-			Arrays.sort(selected_wifi);
-		}
-		if (savedUids_3g.length() > 0) {
-			// Check which applications are allowed
-			final StringTokenizer tok = new StringTokenizer(savedUids_3g, "|");
-			selected_3g = new int[tok.countTokens()];
-			for (int i=0; i<selected_3g.length; i++) {
-				final String uid = tok.nextToken();
-				if (!uid.equals("")) {
-					try {
-						selected_3g[i] = Integer.parseInt(uid);
-					} catch (Exception ex) {
-						selected_3g[i] = -1;
-					}
-				}
-			}
-			// Sort the array to allow using "Arrays.binarySearch" later
-			Arrays.sort(selected_3g);
-		}
 		if (savedUids_cap.length() > 0) {
 			// Check which applications are allowed
 			final StringTokenizer tok = new StringTokenizer(savedUids_cap, "|");
@@ -859,14 +814,9 @@ public final class Api {
 					app.names = newnames;
 				}
 				app.firstseem = firstseem;
-				// check if this application is selected
-				if (!app.selected_wifi && Arrays.binarySearch(selected_wifi, app.uid) >= 0) {
-					app.selected_wifi = true;
-				}
-				if (!app.selected_3g && Arrays.binarySearch(selected_3g, app.uid) >= 0) {
-					app.selected_3g = true;
-				}
 				if (!app.selected_cap && Arrays.binarySearch(selected_cap, app.uid) >= 0) {
+					app.selected_wifi = true;
+					app.selected_3g = true;
 					app.selected_cap = true;
 				}
 			}
@@ -874,7 +824,7 @@ public final class Api {
 				edit.commit();
 			}
 			/* add special applications to the list */
-			final DroidApp special[] = {
+			/*final DroidApp special[] = {
 				new DroidApp(SPECIAL_UID_ANY,"(Any application) - Same as selecting all applications", false, false, false),
 				new DroidApp(SPECIAL_UID_KERNEL,"(Kernel) - Linux kernel", false, false, false),
 				new DroidApp(android.os.Process.getUidForName("root"), "(root) - Applications running as root", false, false, false),
@@ -887,18 +837,14 @@ public final class Api {
 				app = special[i];
 				if (app.uid != -1 && !map.containsKey(app.uid)) {
 					// check if this application is allowed
-					if (Arrays.binarySearch(selected_wifi, app.uid) >= 0) {
-						app.selected_wifi = true;
-					}
-					if (Arrays.binarySearch(selected_3g, app.uid) >= 0) {
-						app.selected_3g = true;
-					}
 					if (Arrays.binarySearch(selected_cap, app.uid) >= 0) {
+						app.selected_wifi = true;
+						app.selected_3g = true;
 						app.selected_cap = true;
 					}
 					map.put(app.uid, app);
 				}
-			}
+			}*/
 			/* convert the map into an array */
 			applications = map.values().toArray(new DroidApp[map.size()]);;
 			return applications;
@@ -1088,47 +1034,9 @@ public final class Api {
 		final SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, 0);
 		final Editor editor = prefs.edit();
 		// allowed application names separated by pipe '|' (persisted)
-		final String savedUids_wifi = prefs.getString(PREF_WIFI_UIDS, "");
-		final String savedUids_3g = prefs.getString(PREF_3G_UIDS, "");
 		final String savedUids_cap = prefs.getString(PREF_CAP_UIDS, "");
 		final String uid_str = uid + "";
 		boolean changed = false;
-		// look for the removed application in the "wi-fi" list
-		if (savedUids_wifi.length() > 0) {
-			final StringBuilder newuids = new StringBuilder();
-			final StringTokenizer tok = new StringTokenizer(savedUids_wifi, "|");
-			while (tok.hasMoreTokens()) {
-				final String token = tok.nextToken();
-				if (uid_str.equals(token)) {
-					Log.d("DroidWall", "Removing UID " + token + " from the wi-fi list (package removed)!");
-					changed = true;
-				} else {
-					if (newuids.length() > 0) newuids.append('|');
-					newuids.append(token);
-				}
-			}
-			if (changed) {
-				editor.putString(PREF_WIFI_UIDS, newuids.toString());
-			}
-		}
-		// look for the removed application in the "3g" list
-		if (savedUids_3g.length() > 0) {
-			final StringBuilder newuids = new StringBuilder();
-			final StringTokenizer tok = new StringTokenizer(savedUids_3g, "|");
-			while (tok.hasMoreTokens()) {
-				final String token = tok.nextToken();
-				if (uid_str.equals(token)) {
-					Log.d("DroidWall", "Removing UID " + token + " from the 3G list (package removed)!");
-					changed = true;
-				} else {
-					if (newuids.length() > 0) newuids.append('|');
-					newuids.append(token);
-				}
-			}
-			if (changed) {
-				editor.putString(PREF_3G_UIDS, newuids.toString());
-			}
-		}
 		// look for the removed application in the "cap" list
 		if (savedUids_cap.length() > 0) {
 			final StringBuilder newuids = new StringBuilder();
