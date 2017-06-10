@@ -70,17 +70,10 @@ import com.googlecode.droidwall.Api.DroidApp;
 public class MainActivity extends AppCompatActivity implements OnCheckedChangeListener, OnClickListener {
 	
 	// Menu options
-	private static final int MENU_DISABLE	= 0;
-	private static final int MENU_TOGGLELOG	= 1;
-	private static final int MENU_APPLY		= 2;
-	private static final int MENU_EXIT		= 3;
-	private static final int MENU_HELP		= 4;
-	private static final int MENU_SHOWLOG	= 5;
-	private static final int MENU_SHOWRULES	= 6;
-	private static final int MENU_CLEARLOG	= 7;
-	private static final int MENU_SETPWD	= 8;
-	private static final int MENU_SETCUSTOM = 9;
-	private static final int MENU_CAPTURE   = 10;
+	private static final int MENU_CAPTURE   = 0;
+	private static final int MENU_EXIT		= 1;
+	private static final int MENU_HELP		= 2;
+	private static final int MENU_SHOWRULES	= 3;
 	
 	/** progress dialog instance */
 	private ListView listview = null;
@@ -311,28 +304,26 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
     }
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-    	menu.add(0, MENU_DISABLE, 0, R.string.fw_enabled).setIcon(android.R.drawable.button_onoff_indicator_on);
-    	menu.add(0, MENU_TOGGLELOG, 0, R.string.log_enabled).setIcon(android.R.drawable.button_onoff_indicator_on);
-    	menu.add(0, MENU_APPLY, 0, R.string.applyrules).setIcon(R.drawable.apply);
+		menu.add(0, MENU_CAPTURE, 0, R.string.cap_disabled);
+    	//menu.add(0, MENU_DISABLE, 0, R.string.fw_enabled).setIcon(android.R.drawable.button_onoff_indicator_on);
+    	//menu.add(0, MENU_TOGGLELOG, 0, R.string.log_enabled).setIcon(android.R.drawable.button_onoff_indicator_on);
+    	//menu.add(0, MENU_APPLY, 0, R.string.applyrules).setIcon(R.drawable.apply);
     	menu.add(0, MENU_EXIT, 0, R.string.exit).setIcon(android.R.drawable.ic_menu_close_clear_cancel);
     	menu.add(0, MENU_HELP, 0, R.string.help).setIcon(android.R.drawable.ic_menu_help);
-    	menu.add(0, MENU_SHOWLOG, 0, R.string.show_log).setIcon(R.drawable.show);
+    	//menu.add(0, MENU_SHOWLOG, 0, R.string.show_log).setIcon(R.drawable.show);
     	menu.add(0, MENU_SHOWRULES, 0, R.string.showrules).setIcon(R.drawable.show);
-    	menu.add(0, MENU_CLEARLOG, 0, R.string.clear_log).setIcon(android.R.drawable.ic_menu_close_clear_cancel);
-    	menu.add(0, MENU_SETPWD, 0, R.string.setpwd).setIcon(android.R.drawable.ic_lock_lock);
-    	menu.add(0, MENU_SETCUSTOM, 0, R.string.set_custom_script);
-		menu.add(0, MENU_CAPTURE, 0, R.string.cap_disabled);
+    	//menu.add(0, MENU_CLEARLOG, 0, R.string.clear_log).setIcon(android.R.drawable.ic_menu_close_clear_cancel);
+    	//menu.add(0, MENU_SETPWD, 0, R.string.setpwd).setIcon(android.R.drawable.ic_lock_lock);
+    	//menu.add(0, MENU_SETCUSTOM, 0, R.string.set_custom_script);
 
     	
     	return true;
     }
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
-    	final MenuItem item_onoff = menu.getItem(MENU_DISABLE);
-    	final MenuItem item_apply = menu.getItem(MENU_APPLY);
 		final MenuItem item_cap = menu.getItem(MENU_CAPTURE);
     	final boolean enabled = Api.isEnabled(this);
-    	if (enabled) {
+    	/*if (enabled) {
     		item_onoff.setIcon(android.R.drawable.button_onoff_indicator_on);
     		item_onoff.setTitle(R.string.fw_enabled);
     		item_apply.setTitle(R.string.applyrules);
@@ -349,10 +340,10 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
     	} else {
     		item_log.setIcon(android.R.drawable.button_onoff_indicator_off);
     		item_log.setTitle(R.string.log_disabled);
-    	}
-    	final boolean capRAWEnabled = getSharedPreferences(Api.PREFS_NAME,0).getBoolean(Api.PREF_RAWCAP, true);
-		final boolean capSSLEnabled = getSharedPreferences(Api.PREFS_NAME,0).getBoolean(Api.PREF_SSLCAP, true);
-		if (capRAWEnabled || capSSLEnabled){
+    	}*/
+    	final boolean capRAWEnabled = getSharedPreferences(Api.PREFS_NAME,0).getBoolean(Api.PREF_RAWCAP, false);
+		final boolean capSSLEnabled = getSharedPreferences(Api.PREFS_NAME,0).getBoolean(Api.PREF_SSLCAP, false);
+		if (capRAWEnabled || capSSLEnabled || enabled){
 			item_cap.setTitle(R.string.cap_enabled);
 		} else {
             item_cap.setTitle(R.string.cap_disabled);
@@ -398,7 +389,7 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
     }*/
 	public boolean onOptionsItemSelected(MenuItem item) {
 		switch (item.getItemId()) {
-			case MENU_DISABLE:
+			/*case MENU_DISABLE:
 				disableOrEnable();
 				return true;
 			case MENU_TOGGLELOG:
@@ -406,7 +397,7 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 				return true;
 			case MENU_APPLY:
 				applyOrSaveRules();
-				return true;
+				return true;*/
 			case MENU_EXIT:
 				finish();
 				System.exit(0);
@@ -414,21 +405,21 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 			case MENU_HELP:
 				new HelpDialog(this).show();
 				return true;
-			case MENU_SETPWD:
+			/*case MENU_SETPWD:
 				setPassword();
 				return true;
 			case MENU_SHOWLOG:
 				showLog();
-				return true;
+				return true;*/
 			case MENU_SHOWRULES:
 				showRules();
 				return true;
-			case MENU_CLEARLOG:
+			/*case MENU_CLEARLOG:
 				clearLog();
 				return true;
 			case MENU_SETCUSTOM:
 				setCustomScript();
-				return true;
+				return true;*/
 			case MENU_CAPTURE:
 				enableOrDisableCapture();
 				return true;
@@ -605,19 +596,24 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 	 * Execute or kill tcpdump and sslsplit.
 	 */
 	private void enableOrDisableCapture() {
+		SharedPreferences pref = getSharedPreferences(Api.PREFS_NAME, 0);
+		final boolean enabled = !Api.isEnabled(this);
+		// TODO Get network interface
+		boolean flag0 = pref.getBoolean(Api.PREF_RAWCAP,false);
+		boolean flag1 = pref.getBoolean(Api.PREF_SSLCAP,false);
+		Log.d("DroidWall", "Changing enabled status to: " + enabled);
 		Date date = new Date();
 		SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd,HH:mm:ss");
 		String timeStr = df.format(date);
-		// TODO Get network interface
-		SharedPreferences pref = getSharedPreferences(Api.PREFS_NAME, 0);
-		boolean flag0 = pref.getBoolean(Api.PREF_RAWCAP,false);
-		boolean flag1 = pref.getBoolean(Api.PREF_SSLCAP,false);
-		if (flag0 || flag1){
+		Api.setEnabled(this, enabled);
+		if (enabled && !flag0 && !flag1) {
+			applyOrSaveRules();
+			Api.execCapture(this, Api.DIR_CAPTURE + "/" + timeStr, "wlan0");
+		} else {
+			purgeRules();
 			Api.killCapture(this);
 		}
-		else{
-			Api.execCapture(this, Api.DIR_CAPTURE + "/" + timeStr, "wlan0");
-		}
+		refreshHeader();
 	}
 	/**
 	 * Called an application is check/unchecked

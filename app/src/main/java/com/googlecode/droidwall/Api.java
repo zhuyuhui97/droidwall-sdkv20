@@ -121,9 +121,9 @@ public final class Api {
 	 */
 	private static String scriptHeader(Context ctx) {
 		final String dir = ctx.getDir("bin",0).getAbsolutePath();
-		final String myiptables = dir + "/iptables_armv5";
-        final String mysslsplit = dir + "/sslsplit_armv7hf";
-        final String mytcpdump = dir + "/tcpdump_armv7hf";
+		final String myiptables = dir + "/" + BIN_IPTABLES;
+        final String mysslsplit = dir + "/" + BIN_SSLSPLIT;
+        final String mytcpdump = dir + "/" + BIN_TCPDUMP;
 		return "" +
 			"IPTABLES=iptables\n" +
 			"BUSYBOX=busybox\n" +
