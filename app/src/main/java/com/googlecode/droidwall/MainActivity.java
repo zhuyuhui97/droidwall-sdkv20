@@ -38,6 +38,7 @@ import android.content.SharedPreferences.Editor;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -94,6 +95,7 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 		setContentView(R.layout.main);
 		this.findViewById(R.id.label_mode).setOnClickListener(this);
 		Api.assertBinaries(this, true);
+        Api.initArch(Build.CPU_ABI);
     }
     @Override
     protected void onResume() {

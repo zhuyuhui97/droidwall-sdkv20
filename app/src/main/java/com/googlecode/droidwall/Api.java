@@ -88,10 +88,18 @@ public final class Api {
 	public static final String SCRIPT_EXTRA			= "com.googlecode.droidwall.intent.extra.SCRIPT";
 	public static final String SCRIPT2_EXTRA		= "com.googlecode.droidwall.intent.extra.SCRIPT2";
 	// Binary file name
-	public static final String BIN_BUSYBOX          = "busybox_armv6l";
-	public static final String BIN_IPTABLES         = "iptables_armv5";
-	public static final String BIN_SSLSPLIT         = "sslsplit_armv7hf";
-	public static final String BIN_TCPDUMP          = "tcpdump_armv7hf";
+	public static final String BIN_BUSYBOX_ARM      = "busybox_armv6l";
+	public static final String BIN_IPTABLES_ARM     = "iptables_armv5";
+	public static final String BIN_SSLSPLIT_ARM     = "sslsplit_armv7hf";
+	public static final String BIN_TCPDUMP_ARM      = "tcpdump_armv7hf";
+	public static final String BIN_BUSYBOX_X86      = "busybox_x86";
+	public static final String BIN_IPTABLES_X86     = "iptables_x86";
+	public static final String BIN_SSLSPLIT_X86     = "sslsplit_x86";
+	public static final String BIN_TCPDUMP_X86      = "tcpdump_x86";
+	public static String BIN_BUSYBOX                = BIN_BUSYBOX_ARM;
+	public static String BIN_IPTABLES               = BIN_IPTABLES_ARM;
+	public static String BIN_SSLSPLIT               = BIN_SSLSPLIT_ARM;
+	public static String BIN_TCPDUMP                = BIN_TCPDUMP_ARM;
 	// Capture directory
 	public static final String DIR_CAPTURE          = "/sdcard/capture";
 
@@ -100,6 +108,16 @@ public final class Api {
 	public static DroidApp applications[] = null;
 	// Do we have root access?
 	private static boolean hasroot = false;
+
+	public static void initArch(String abi){
+		if (abi.contains("x86"))
+		{
+			BIN_BUSYBOX    = BIN_BUSYBOX_X86;
+			BIN_IPTABLES   = BIN_IPTABLES_X86;
+			BIN_SSLSPLIT   = BIN_SSLSPLIT_X86;
+			BIN_TCPDUMP    = BIN_TCPDUMP_X86;
+		}
+	}
 
     /**
      * Display a simple alert box
@@ -131,9 +149,10 @@ public final class Api {
 			"ECHO=echo\n" +
 			"TCPDUMP=" + mytcpdump + "\n" +
 			"SSLSPLIT=" + mysslsplit + "\n" +
+			"BUSYBOX_ARCHSPEC=" + BIN_BUSYBOX + "\n" +
 			"# Try to find busybox\n" +
-			"if " + dir + "/busybox_armv6l --help >/dev/null 2>/dev/null ; then\n" +
-			"	BUSYBOX="+dir+"/busybox_armv6l\n" +
+			"if " + dir + "/$BUSYBOX_ARCHSPEC --help >/dev/null 2>/dev/null ; then\n" +
+			"	BUSYBOX="+dir+"/$BUSYBOX_ARCHSPEC\n" +
 			"	GREP=\"$BUSYBOX grep\"\n" +
 			"	ECHO=\"$BUSYBOX echo\"\n" +
 			"elif busybox --help >/dev/null 2>/dev/null ; then\n" +
@@ -960,16 +979,31 @@ public final class Api {
 				copyRawFile(ctx, R.raw.busybox_armv6l, file, "755");
 				changed = true;
 			}
+			file = new File(ctx.getDir("bin",0), "busybox_x86");
+			if (!file.exists()) {
+				copyRawFile(ctx, R.raw.busybox_x86, file, "755");
+				changed = true;
+			}
 			// Check sslsplit
 			file = new File(ctx.getDir("bin",0), "sslsplit_armv7hf");
 			if (!file.exists()) {
 				copyRawFile(ctx, R.raw.sslsplit_armv7hf, file, "755");
 				changed = true;
 			}
+			file = new File(ctx.getDir("bin",0), "sslsplit_x86");
+			if (!file.exists()) {
+				copyRawFile(ctx, R.raw.sslsplit_x86, file, "755");
+				changed = true;
+			}
 			// Check tcpdump
 			file = new File(ctx.getDir("bin",0), "tcpdump_armv7hf");
 			if (!file.exists()) {
 				copyRawFile(ctx, R.raw.tcpdump_armv7hf, file, "755");
+				changed = true;
+			}
+			file = new File(ctx.getDir("bin",0), "tcpdump_x86");
+			if (!file.exists()) {
+				copyRawFile(ctx, R.raw.tcpdump_x86, file, "755");
 				changed = true;
 			}
 			// Check certs
