@@ -30,8 +30,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.StringReader;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
+import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -49,11 +52,14 @@ import android.graphics.drawable.Drawable;
 import android.util.Log;
 import android.widget.Toast;
 
+
+
 /**
  * Contains shared programming interfaces.
  * All iptables "communication" is handled by this class.
  */
 public final class Api {
+	private static final String TAG = "Api";
 	/** application version string */
 	public static final String VERSION = "1.5.7";
 	/** special application UID used to indicate "any application" */
@@ -76,6 +82,7 @@ public final class Api {
 	public static final String PREF_CAP_UIDS		= "CapUids";
 	public static final String PREF_RAWCAP          = "RawCapEnabled";
 	public static final String PREF_SSLCAP          = "SslCapEnabled";
+	public static final String PREF_AUTOCAP         = "AutoCapEnabled";
 	// Modes
 	public static final String MODE_WHITELIST = "whitelist";
 	public static final String MODE_BLACKLIST = "blacklist";
@@ -736,6 +743,7 @@ public final class Api {
 		*/
 		edit.putBoolean(PREF_SSLCAP,false);
 		edit.putBoolean(PREF_RAWCAP,false);
+		edit.putBoolean(PREF_AUTOCAP,false);
 		edit.commit();
 	}
 
@@ -1017,6 +1025,11 @@ public final class Api {
 				copyRawFile(ctx, R.raw.ca_key, file, "644");
 				changed = true;
 			}
+			file = new File(ctx.getDir("bin",0), "uaplugin.jar");
+			if (!file.exists()) {
+				copyRawFile(ctx, R.raw.uaplugin, file, "644");
+				changed = true;
+			}
 			if (changed) {
 				Toast.makeText(ctx, R.string.toast_bin_installed, Toast.LENGTH_LONG).show();
 			}
@@ -1098,6 +1111,71 @@ public final class Api {
 			}
 		}
 	}
+
+	//===== ↓ Automatic test and capture ↓ =====//
+	public static boolean getAutoCapStatus(Context ctx){
+		SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME,0);
+		return prefs.getBoolean(PREF_AUTOCAP,false);
+	}
+
+	public static void setAutoCapStatus(Context ctx, boolean status){
+		SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME,0);
+		Editor edit = prefs.edit();
+		edit.putBoolean(PREF_AUTOCAP,status);
+		edit.commit();
+		//if (!status){
+			unsetAllCap(ctx);
+			//killMonkeys(ctx);
+		//} else
+	}
+
+	public static HashMap<String, Integer> getAppDict(Context ctx, String name){
+		final PackageManager pkgmanager = ctx.getPackageManager();
+		final List<ApplicationInfo> installed = pkgmanager.getInstalledApplications(0);
+		final HashMap<String, Integer> map = new HashMap<String, Integer>();
+		for (final ApplicationInfo apinfo : installed){
+			map.put(apinfo.packageName, apinfo.uid);
+		}
+		return map;
+	}
+
+	public static int getUidByName(Context ctx, String name){
+		HashMap<String, Integer> map = getAppDict(ctx, name);
+		return map.get(name);
+	}
+
+	public static void setCapForSpecApp(Context ctx, String pkgName){
+		Date date = new Date();
+		SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd,HH:mm:ss");
+		String timeStr = df.format(date);
+		SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, 0);
+		Integer uid;
+		try{
+			uid = getUidByName(ctx, pkgName);final Editor edit = prefs.edit();
+			edit.putString(PREF_CAP_UIDS, uid.toString());
+			edit.commit();
+			Api.setEnabled(ctx, true);
+			Api.applySavedIptablesRules(ctx,true);
+			Api.execCapture(ctx, Api.DIR_CAPTURE + "/" + pkgName + "," + timeStr, "wlan0");
+			applications = null;
+		} catch ( NullPointerException ex) {
+			Log.e(TAG, "setCapForSpecApp: No specified app " + pkgName, ex);
+			Toast.makeText(ctx, "setCapForSpecApp: No specified app " + pkgName, Toast.LENGTH_LONG).show();
+			return;
+		}
+	}
+
+	public static void unsetAllCap(Context ctx){
+		SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, 0);
+		final Editor edit = prefs.edit();
+		edit.putString(PREF_CAP_UIDS, "");
+		edit.commit();
+		Api.setEnabled(ctx, false);
+		purgeIptables(ctx, true);
+		Api.killCapture(ctx);
+		applications = null;
+	}
+	//===== ↑ Automatic test and capture ↑ =====//
 
     /**
      * Small structure to hold an application info

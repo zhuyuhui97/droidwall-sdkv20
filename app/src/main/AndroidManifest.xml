@@ -28,6 +28,18 @@
                 <data android:scheme="package" />
             </intent-filter>
         </receiver>
+        <receiver android:name ="CaptureBroadcast"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="cn.cpuboom.capture.action.AUTO_START"/>
+                <action android:name="cn.cpuboom.capture.action.AUTO_STOP"/>
+                <action android:name="cn.cpuboom.capture.action.AUTO_SET"/>
+                <action android:name="cn.cpuboom.capture.action.AUTO_UNSET"/>
+                <action android:name="cn.cpuboom.capture.action.AUTO_UNSET_ALL"/>
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
         <receiver android:name="StatusWidget">
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/onoff_widget" />
             <intent-filter>
