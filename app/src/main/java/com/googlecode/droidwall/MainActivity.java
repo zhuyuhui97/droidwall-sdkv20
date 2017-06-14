@@ -31,8 +31,11 @@ import java.util.Date;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
 import android.content.pm.PackageManager;
@@ -75,11 +78,13 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 	private static final int MENU_EXIT		= 1;
 	private static final int MENU_HELP		= 2;
 	private static final int MENU_SHOWRULES	= 3;
+	private static final int MENU_NETIF  	= 4;
 	
 	/** progress dialog instance */
 	private ListView listview = null;
 	/** indicates if the view has been modified and not yet saved */
 	private boolean dirty = false;
+	private BroadcastReceiver brc_recv = null;
 	
     /** Called when the activity is first created. */
     @Override
@@ -112,11 +117,17 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 			// Check the password
 			requestPassword(pwd);
 		}
+		brc_recv = new MainActvReceiver();
+		IntentFilter intentFilter = new IntentFilter();
+		intentFilter.addAction(CaptureBroadcast.ACTION_REFRESH_AUTO);
+		intentFilter.addAction(CaptureBroadcast.ACTION_REFRESH_MANUAL);
+		registerReceiver(brc_recv, intentFilter);
     }
     @Override
     protected void onPause() {
     	super.onPause();
     	this.listview.setAdapter(null);
+		unregisterReceiver(brc_recv);
     }
     /**
      * Check if the stored preferences are OK
@@ -254,6 +265,7 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
      */
     private void showApplications() {
     	this.dirty = false;
+		final boolean editable = !((getSharedPreferences(Api.PREFS_NAME, 0).getBoolean(Api.PREF_AUTOCAP, false)) || (Api.isEnabled(this)));
         final DroidApp[] apps = Api.getApps(this);
         // Sort applications - selected first, then alphabetically
         Arrays.sort(apps, new Comparator<DroidApp>() {
@@ -299,6 +311,7 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 				final CheckBox box_cap = entry.box_cap;
 				box_cap.setTag(app);
 				box_cap.setChecked(app.selected_cap);
+				entry.box_cap.setEnabled(editable);// Do not edit list when capture is enabled
        			return convertView;
         	}
         };
@@ -317,6 +330,7 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
     	//menu.add(0, MENU_CLEARLOG, 0, R.string.clear_log).setIcon(android.R.drawable.ic_menu_close_clear_cancel);
     	//menu.add(0, MENU_SETPWD, 0, R.string.setpwd).setIcon(android.R.drawable.ic_lock_lock);
     	//menu.add(0, MENU_SETCUSTOM, 0, R.string.set_custom_script);
+		menu.add(0, MENU_NETIF, 0, R.string.netif).setIcon(R.drawable.show);
 
     	
     	return true;
@@ -324,6 +338,7 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
 		final MenuItem item_cap = menu.getItem(MENU_CAPTURE);
+		final MenuItem item_exit = menu.getItem(MENU_EXIT);
     	final boolean enabled = Api.isEnabled(this);
     	/*if (enabled) {
     		item_onoff.setIcon(android.R.drawable.button_onoff_indicator_on);
@@ -350,6 +365,8 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 		} else {
             item_cap.setTitle(R.string.cap_disabled);
         }
+        item_cap.setEnabled(!Api.getAutoCapStatus(this));
+		item_exit.setEnabled(!Api.getAutoCapStatus(this));
     	return super.onPrepareOptionsMenu(menu);
     }
     /*@Override
@@ -424,6 +441,9 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 				return true;*/
 			case MENU_CAPTURE:
 				enableOrDisableCapture();
+				return true;
+			case MENU_NETIF:
+				setNetIf();
 				return true;
 		}
 		return false;
@@ -594,6 +614,37 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 		};
 		handler.sendEmptyMessageDelayed(0, 100);
 	}
+	/*
+	* Set network interface
+	*
+	*/
+	private void setNetIf(String netif) {
+		final Resources res = getResources();
+		final Editor editor = getSharedPreferences(Api.PREFS_NAME, 0).edit();
+		editor.putString(Api.PREF_NETIF, netif);
+		String msg;
+		if (editor.commit()) {
+			if (netif.length() > 0) {
+				msg = res.getString(R.string.netifdefined);
+			} else {
+				msg = res.getString(R.string.netifremoved);
+			}
+		} else {
+			msg = res.getString(R.string.netiferror);
+		}
+		Toast.makeText(MainActivity.this, msg, Toast.LENGTH_SHORT).show();
+	}
+
+	private void setNetIf() {
+		new NetInterfaceDialog(this, true, new Handler.Callback() {
+			public boolean handleMessage(Message msg) {
+				if (msg.obj != null) {
+					setNetIf((String)msg.obj);
+				}
+				return false;
+			}
+		}).show();
+	}
 	/**
 	 * Execute or kill tcpdump and sslsplit.
 	 */
@@ -610,12 +661,14 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 		Api.setEnabled(this, enabled);
 		if (enabled && !flag0 && !flag1) {
 			applyOrSaveRules();
-			Api.execCapture(this, Api.DIR_CAPTURE + "/" + timeStr, "wlan0");
+			Api.execCapture(this, Api.DIR_CAPTURE + "/" + timeStr);
 		} else {
 			purgeRules();
 			Api.killCapture(this);
 		}
-		refreshHeader();
+		Intent intent_out = new Intent(CaptureBroadcast.ACTION_REFRESH_MANUAL);
+		sendBroadcast(intent_out);
+		//refreshHeader();
 	}
 	/**
 	 * Called an application is check/unchecked
@@ -714,5 +767,14 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 		private TextView text;
 		private ImageView icon;
 		private DroidApp app;
+	}
+
+	private class MainActvReceiver extends BroadcastReceiver{
+		@Override
+		public void onReceive(Context context, Intent intent) {
+			String action = intent.getAction();
+			refreshHeader();
+			showOrLoadApplications();
+		}
 	}
 }

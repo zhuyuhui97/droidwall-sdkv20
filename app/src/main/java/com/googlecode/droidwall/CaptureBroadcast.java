@@ -22,6 +22,12 @@ public class CaptureBroadcast extends BroadcastReceiver {
     public static final String ACTION_AUTO_SET = "cn.cpuboom.capture.action.AUTO_SET";
     public static final String ACTION_AUTO_UNSET = "cn.cpuboom.capture.action.AUTO_UNSET";
     public static final String ACTION_AUTO_UNSET_ALL = "cn.cpuboom.capture.action.AUTO_UNSET_ALL";
+    public static final String ACTION_IPTB_SET = "cn.cpuboom.capture.action.IPTABLES_SET";
+    public static final String ACTION_IPTB_UNSET = "cn.cpuboom.capture.action.IPTABLES_UNSET";
+    // Refresh action caused by a manual command
+    public static final String ACTION_REFRESH_MANUAL = "cn.cpuboom.capture.action.REFRESH_MANUAL";
+    // Refresh action caused by an auto command
+    public static final String ACTION_REFRESH_AUTO = "cn.cpuboom.capture.action.REFRESH_AUTO";
     @Override
     public void onReceive(final Context context, Intent intent) {
         boolean autoCapStatus = false;
@@ -39,7 +45,6 @@ public class CaptureBroadcast extends BroadcastReceiver {
             Api.setAutoCapStatus(context, false);
             autoCapStatus = false;
         } else if (autoCapStatus) {
-            Log.d(TAG, "onReceive: aaaa");
             if (action.equals(ACTION_AUTO_SET)) {
                 final String pkgName = intent.getExtras().getCharSequence("PKG_NAME").toString();
                 final String ports;
@@ -69,7 +74,8 @@ public class CaptureBroadcast extends BroadcastReceiver {
         } else {
             Log.d(TAG, "onReceive: Trying to set capture before setting preference???");
         }
-
+        Intent intent_out = new Intent(ACTION_REFRESH_AUTO);
+        context.sendBroadcast(intent_out);
 
     }
 }

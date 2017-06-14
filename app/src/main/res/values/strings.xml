@@ -87,4 +87,13 @@
 
     <string name="cap_enabled">Capture enabled</string>
     <string name="cap_disabled">Capture disabled</string>
+    <string name="netif">Network interface</string>
+    <string name="enternetif">Enter the network interface:</string>
+    <string name="enternewnetif">Enter the new network interface (leave blank to use default wlan0):</string>
+    <string name="netif_titleset">Set network interface</string>
+    <string name="netif_titleget">Network interface required</string>
+
+    <string name="netifdefined">Network interface defined</string>
+    <string name="netifremoved">Network interface removed</string>
+    <string name="netiferror">Error changing network interface</string>
 </resources>
