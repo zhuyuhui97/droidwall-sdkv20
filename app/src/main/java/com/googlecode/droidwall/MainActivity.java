@@ -605,7 +605,7 @@ public class MainActivity extends AppCompatActivity implements OnCheckedChangeLi
 		boolean flag1 = pref.getBoolean(Api.PREF_SSLCAP,false);
 		Log.d("DroidWall", "Changing enabled status to: " + enabled);
 		Date date = new Date();
-		SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd,HH:mm:ss");
+		SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd,HH-mm-ss");
 		String timeStr = df.format(date);
 		Api.setEnabled(this, enabled);
 		if (enabled && !flag0 && !flag1) {

@@ -49,6 +49,7 @@ public class BootBroadcast extends BroadcastReceiver {
 				new Thread() {
 					@Override
 					public void run() {
+						/*
 						if (!Api.applySavedIptablesRules(context, false)) {
 							// Error enabling firewall on boot
 		        			final Message msg = new Message();
@@ -56,6 +57,9 @@ public class BootBroadcast extends BroadcastReceiver {
 		        			toaster.sendMessage(msg);
 							Api.setEnabled(context, false);
 						}
+						*/
+						Api.setEnabled(context, false);
+						// Not set iptables rules on boot but just clear firewall status?
 						Api.clearCaptureStatusOnBoot(context);
 					}
 				}.start();

@@ -83,6 +83,7 @@ public final class Api {
 	public static final String PREF_RAWCAP          = "RawCapEnabled";
 	public static final String PREF_SSLCAP          = "SslCapEnabled";
 	public static final String PREF_AUTOCAP         = "AutoCapEnabled";
+	public static final String PREF_AUTOCAP_CURRENT = "AutoCapCurrent";
 	// Modes
 	public static final String MODE_WHITELIST = "whitelist";
 	public static final String MODE_BLACKLIST = "blacklist";
@@ -109,6 +110,8 @@ public final class Api {
 	public static String BIN_TCPDUMP                = BIN_TCPDUMP_ARM;
 	// Capture directory
 	public static final String DIR_CAPTURE          = "/sdcard/capture";
+	// default ssl port
+	public static final String DEF_SSL_PORT         = "443";
 
 	
 	// Cached applications
@@ -226,9 +229,10 @@ public final class Api {
      * @param ctx application context (mandatory)
      * @param uidsWifi list of selected UIDs for WIFI to allow or disallow (depending on the working mode)
      * @param uids3g list of selected UIDs for 2G/3G to allow or disallow (depending on the working mode)
+	 * @param sslPort possible SSL server port
      * @param showErrors indicates if errors should be alerted
      */
-	private static boolean applyIptablesRulesImpl(Context ctx, List<Integer> uidsWifi, List<Integer> uids3g, List<Integer> uidsCap, boolean showErrors) {
+	private static boolean applyIptablesRulesImpl(Context ctx, List<Integer> uidsWifi, List<Integer> uids3g, List<Integer> uidsCap, List<String> sslPort, boolean showErrors) {
 		if (ctx == null) {
 			return false;
 		}
@@ -373,7 +377,11 @@ public final class Api {
 			}
 			if (any_cap){
 				for (final Integer uid : uidsCap) {
-					if (uid >= 10000) script.append("$IPTABLES -t nat -A capture -m owner --uid-owner ").append(uid).append(" -p tcp --dport 443 -j DNAT --to 127.0.0.1:8443 || exit\n");
+					//if (uid >= 10000) script.append("$IPTABLES -t nat -A capture -m owner --uid-owner ").append(uid).append(" -p tcp --dport 443 -j DNAT --to 127.0.0.1:8443 || exit\n");
+					if (uid >= 10000){
+						for (final String port : sslPort)
+							script.append("$IPTABLES -t nat -A capture -m owner --uid-owner ").append(uid).append(" -p tcp --dport ").append(port).append(" -j DNAT --to 127.0.0.1:8443 || exit\n");
+					}
 				}
 			}
 	    	final StringBuilder res = new StringBuilder();
@@ -401,6 +409,10 @@ public final class Api {
      * @param showErrors indicates if errors should be alerted
      */
 	public static boolean applySavedIptablesRules(Context ctx, boolean showErrors) {
+		return applySavedIptablesRules(ctx, showErrors, DEF_SSL_PORT);
+	}
+
+	public static boolean applySavedIptablesRules(Context ctx, boolean showErrors, String sslPortsStr) {
 		if (ctx == null) {
 			return false;
 		}
@@ -449,7 +461,22 @@ public final class Api {
 				}
 			}
 		}
-		return applyIptablesRulesImpl(ctx, uids_cap, uids_cap, uids_cap, showErrors);
+		final List<String> sslPorts = new LinkedList<String>();
+		if (sslPortsStr.length() > 0) {
+			final StringTokenizer tok = new StringTokenizer(sslPortsStr, "|");
+			while (tok.hasMoreTokens()) {
+				final String port = tok.nextToken();
+				if (!port.equals("")) {
+					try {
+						sslPorts.add(port);
+					} catch (Exception ex) {
+					}
+				}
+			}
+		} else {
+			sslPorts.add(DEF_SSL_PORT);
+		}
+		return applyIptablesRulesImpl(ctx, uids_cap, uids_cap, uids_cap, sslPorts, showErrors);
 	}
 	
     /**
@@ -745,6 +772,7 @@ public final class Api {
 		edit.putBoolean(PREF_RAWCAP,false);
 		edit.putBoolean(PREF_AUTOCAP,false);
 		edit.commit();
+		unsetAllCap(ctx);
 	}
 
 	/**
@@ -1144,18 +1172,23 @@ public final class Api {
 		return map.get(name);
 	}
 
-	public static void setCapForSpecApp(Context ctx, String pkgName){
+	public static void setCapForSpecApp(Context ctx, String pkgName, String ports){
 		Date date = new Date();
-		SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd,HH:mm:ss");
+		SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd,HH-mm-ss");
 		String timeStr = df.format(date);
 		SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, 0);
+		String autocap_current = prefs.getString(PREF_AUTOCAP_CURRENT, "");
 		Integer uid;
+		if (autocap_current.isEmpty()){
+			unsetAllCap(ctx);
+		}
 		try{
 			uid = getUidByName(ctx, pkgName);final Editor edit = prefs.edit();
 			edit.putString(PREF_CAP_UIDS, uid.toString());
+			edit.putString(PREF_AUTOCAP_CURRENT, uid.toString());
 			edit.commit();
 			Api.setEnabled(ctx, true);
-			Api.applySavedIptablesRules(ctx,true);
+			Api.applySavedIptablesRules(ctx,true, ports);
 			Api.execCapture(ctx, Api.DIR_CAPTURE + "/" + pkgName + "," + timeStr, "wlan0");
 			applications = null;
 		} catch ( NullPointerException ex) {
@@ -1169,6 +1202,7 @@ public final class Api {
 		SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, 0);
 		final Editor edit = prefs.edit();
 		edit.putString(PREF_CAP_UIDS, "");
+		edit.putString(PREF_AUTOCAP_CURRENT, "");
 		edit.commit();
 		Api.setEnabled(ctx, false);
 		purgeIptables(ctx, true);
