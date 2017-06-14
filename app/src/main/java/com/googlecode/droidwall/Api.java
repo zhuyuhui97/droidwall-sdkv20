@@ -84,6 +84,7 @@ public final class Api {
 	public static final String PREF_SSLCAP          = "SslCapEnabled";
 	public static final String PREF_AUTOCAP         = "AutoCapEnabled";
 	public static final String PREF_AUTOCAP_CURRENT = "AutoCapCurrent";
+    public static final String PREF_NETIF           = "NetworkInterface";
 	// Modes
 	public static final String MODE_WHITELIST = "whitelist";
 	public static final String MODE_BLACKLIST = "blacklist";
@@ -110,8 +111,9 @@ public final class Api {
 	public static String BIN_TCPDUMP                = BIN_TCPDUMP_ARM;
 	// Capture directory
 	public static final String DIR_CAPTURE          = "/sdcard/capture";
-	// default ssl port
+	// default arguments
 	public static final String DEF_SSL_PORT         = "443";
+	public static final String DEF_NETIF            = "wlan0";
 
 	
 	// Cached applications
@@ -678,8 +680,10 @@ public final class Api {
 	 * Execute tcpump and sslsplit to start capture.
 	 * @param ctx application context
 	 */
-	public static void execCapture(Context ctx, String capDir, String netif){
-		startRAWCapture(ctx, capDir + "/pcap", netif);
+	public static void execCapture(Context ctx, String capDir){
+		String netIfStr = ctx.getSharedPreferences(Api.PREFS_NAME, 0).getString(Api.PREF_NETIF, "");
+		if (netIfStr.isEmpty()) netIfStr = DEF_NETIF;
+		startRAWCapture(ctx, capDir + "/pcap", netIfStr);
 		startSSLCapture(ctx,capDir + "/ssl");
 	}
 	/**
@@ -712,7 +716,7 @@ public final class Api {
 			script.append(scriptHeader(ctx));
 			script.append("$BUSYBOX mkdir -p " + capDir + "\n");
 			script.append("$SSLSPLIT -c " + crtfile + " -k " + keyfile + " -S "+ capDir + " -d ssl 127.0.0.1 8443");
-			runScriptAsRoot(ctx,script.toString(),res,1000);
+			runScriptAsRoot(ctx,script.toString(),res,5000);
 			edit.putBoolean(PREF_SSLCAP,true);
 			edit.commit();
 			return true;
@@ -736,8 +740,8 @@ public final class Api {
 		try{
 			script.append(scriptHeader(ctx));
 			script.append("$BUSYBOX mkdir -p " + capDir + "\n");
-			script.append("$TCPDUMP -i " + netif + " -w " + capDir + "/main.pcap ip &");
-			runScriptAsRoot(ctx,script.toString(),res,1000);
+			script.append("$TCPDUMP -i " + netif + " -w " + capDir + "/main.pcap ip & sleep 0.5");
+			runScriptAsRoot(ctx,script.toString(),res,5000);
 			edit.putBoolean(PREF_RAWCAP,true);
 			edit.commit();
 			return true;
@@ -1189,7 +1193,7 @@ public final class Api {
 			edit.commit();
 			Api.setEnabled(ctx, true);
 			Api.applySavedIptablesRules(ctx,true, ports);
-			Api.execCapture(ctx, Api.DIR_CAPTURE + "/" + pkgName + "," + timeStr, "wlan0");
+			Api.execCapture(ctx, Api.DIR_CAPTURE + "/" + pkgName + "," + timeStr);
 			applications = null;
 		} catch ( NullPointerException ex) {
 			Log.e(TAG, "setCapForSpecApp: No specified app " + pkgName, ex);
