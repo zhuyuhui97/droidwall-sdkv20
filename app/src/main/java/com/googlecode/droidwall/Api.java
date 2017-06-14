@@ -772,7 +772,7 @@ public final class Api {
 		edit.putBoolean(PREF_RAWCAP,false);
 		edit.putBoolean(PREF_AUTOCAP,false);
 		edit.commit();
-		unsetAllCap(ctx);
+		setAutoCapStatus(ctx, false);
 	}
 
 	/**
