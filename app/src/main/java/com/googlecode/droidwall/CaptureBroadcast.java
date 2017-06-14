@@ -42,12 +42,17 @@ public class CaptureBroadcast extends BroadcastReceiver {
             Log.d(TAG, "onReceive: aaaa");
             if (action.equals(ACTION_AUTO_SET)) {
                 final String pkgName = intent.getExtras().getCharSequence("PKG_NAME").toString();
+                final String ports;
+                CharSequence ports_cs = intent.getExtras().getCharSequence("PORTS");
+                if (ports_cs != null)
+                    ports = ports_cs.toString();
+                else
+                    ports = Api.DEF_SSL_PORT;
                 new Thread(){
                     @Override
                     public void run() {
-                        setCapForSpecApp(context, pkgName);
+                        setCapForSpecApp(context, pkgName, ports);
                         super.run();
-
                     }
                 }.run();
             } else if (action.equals(ACTION_AUTO_UNSET)){
