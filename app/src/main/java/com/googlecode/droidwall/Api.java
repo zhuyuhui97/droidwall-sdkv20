@@ -110,10 +110,10 @@ public final class Api {
 	public static String BIN_SSLSPLIT               = BIN_SSLSPLIT_ARM;
 	public static String BIN_TCPDUMP                = BIN_TCPDUMP_ARM;
 	// Capture directory
-	public static final String DIR_CAPTURE          = "/sdcard/capture";
+	public static final String DIR_CAPTURE          = "/data/capture";
 	// default arguments
 	public static final String DEF_SSL_PORT         = "443";
-	public static final String DEF_NETIF            = "wlan0";
+	public static final String DEF_NETIF            = "eth0";
 
 	
 	// Cached applications
